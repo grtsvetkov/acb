@@ -1,5 +1,10 @@
 #include <rim-PCD8544.h> //Библиотека дисплея
 #include <Keypad.h> //Библиотека клавиатуры
+#include <DHT.h>
+#include <avr/pgmspace.h>
+#include "image.cpp"
+
+
 
 static PCD8544 lcd; //Дисплей. Конструктор смотреть в библиотеке. Там и пины прописаны
 
@@ -13,17 +18,23 @@ char keys[keypad_rows][keypad_cols] = {
   {'*', '0', '#'}
 };
 
-byte rowPins[keypad_rows] = {13, 12, 11, 10}; //connect to the row pinouts of the keypad
-byte colPins[keypad_cols] = {9, 7, 8}; //connect to the column pinouts of the keypad
+byte rowPins[keypad_rows] = {13, 12, 11, 10}; //соединяем сроки с пинами для клавиатуры
+byte colPins[keypad_cols] = {9, 7, 8}; //соединяем столбцы с пинами для клавиатуры
 
 Keypad keypad = Keypad( makeKeymap(keys), rowPins, colPins, keypad_rows, keypad_cols); //Инициализируем клавиатуру
 
-unsigned long previousMillis = 0;
-unsigned long time = 0; //Текущее время (в миллисекундах)
+unsigned long previousMillis = 0; //Предыдущее (d loop`е) значение в миллисекундах
 
-unsigned long alarm = 36000; //Установленный будильник в секундах (по умолчанию на 10:00:00)
+unsigned long time = 0; //Текущее время (в секундах)
+
+unsigned long alarm = 10; //Установленный будильник в секундах (по умолчанию на 10:00:00)
 
 bool status = false; //Текущее состояние (будет ли включена кофеварка по будильнику)
+
+bool cook_flag = false;
+unsigned long cook = 10; //Установленное время приготовления (в секундах)
+unsigned long cook_tmp = 0; //Текущее время приготовления (в секундах)
+
 
 byte selected_menu = 0;  //Выбранный пунк меню
 byte hover_menu = 0; //Подсвеченный пунк меню
@@ -31,6 +42,8 @@ byte hover_menu_count = 5; //Устанавливаем количество э�
 
 byte currentTimeCursor = 0; //Текущая позиция курсора по отрисовке времени
 char currentTime[4] = {'1', '3', '5', '6'}; //Текущие введенные цифры времени
+
+//Коды шрифта цифр в инверсии (для дисплея)
 byte inverseInt[10] = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19};
 /**
    Меню:
@@ -38,7 +51,7 @@ byte inverseInt[10] = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x1
    - установка состояния (1)
    - установка будильника (2)
    - установка времени (3)
-   - настройка дисплея (4)
+   - установка приготовления (4)
    - выход (5) (только для hover_menu)
 
    Выбранный пунк меню по коду такой же, как и выше.
@@ -49,48 +62,8 @@ byte inverseInt[10] = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x1
    И так далее
 */
 
-/*
-   Небольшое отступление как отображать русские буквы на дисплее
 
-   {0xC0, "А"}, {0xC1, "Б"}, {0xC2, "В"}, {0xC3, "Г"}, {0xC4, "Д"}, {0xC5, "Е"}, {0xC6, "Ж"}, {0xC7, "З"}, {0xC8, "И"}, {0xC9, "Й"}, {0xCA, "К"},
-   {0xCB, "Л"}, {0xCC, "М"}, {0xCD, "Н"}, {0xCE, "О"}, {0xCF, "П"}, {0xD0, "Р"}, {0xD1, "С"}, {0xD2, "Т"}, {0xD3, "У"}, {0xD4, "Ф"}, {0xD5, "Х"},
-   {0xD6, "Ц"}, {0xD7, "Ч"}, {0xD8, "Ш"}, {0xD9, "Щ"}, {0xDA, "Ъ"}, {0xDB, "Ы"}, {0xDC, "Ь"}, {0xDD, "Э"}, {0xDE, "Ю"}, {0xDF, "Я"}, {0xE0, "а"},
-   {0xE1, "б"}, {0xE2, "в"}, {0xE3, "г"}, {0xE4, "д"}, {0xE5, "е"}, {0xE6, "ж"}, {0xE7, "з"}, {0xE8, "и"}, {0xE9, "й"}, {0xEA, "к"}, {0xEB, "л"},
-   {0xEC, "м"}, {0xED, "н"}, {0xEE, "о"}, {0xEF, "п"}, {0xF0, "р"}, {0xF1, "с"}, {0xF2, "т"}, {0xF3, "у"}, {0xF4, "ф"}, {0xF5, "х"}, {0xF6, "ц"},
-   {0xF7, "ч"}, {0xF8, "ш"}, {0xF9, "щ"}, {0xFA, "ъ"}, {0xFB, "ы"}, {0xFC, "ь"}, {0xFD, "э"}, {0xFE, "ю"}, {0xFF, "я"}
-
-  //Библиотека на js для отображения HEX кодов русских символов (для дисплея)
-  var trans = [];
-  for (var i = 0x410; i <= 0x44F; i++) trans[i] = i - 0x350; // А-Яа-я
-  trans[0x401] = 0xA8;    // Ё
-  trans[0x451] = 0xB8;    // ё
-
-  to_win_1251 = function(str) {
-  var ret = [];
-  for (var i = 0; i < str.length; i++) {
-    var n = str.charCodeAt(i);
-    if (typeof trans[n] != 'undefined') n = trans[n];
-    if (n <= 0xFF) {
-      ret.push('lcd.write(0x'+n.toString(16)+');');
-    }
-  }
-  console.log(ret.join(' '));
-  }
-  to_win_1251('Привет');
-
-  Фишка в моём шрифте - инверсированные цифры 0-9
-  { 0xC1, 0xAE, 0xB6, 0xBA, 0xC1},  //0x30 inverse 0
-  { 0xFF, 0xBD, 0x80, 0xBF, 0xFF},  //0x31 inverse 1
-  { 0x8D, 0xB6, 0xB6, 0xB6, 0xB9},  //0x32 inverse 2
-  { 0xDE, 0xBE, 0xB6, 0xB2, 0xCC},  //0x33 inverse 3
-  { 0xE7, 0xEB, 0xED, 0x80, 0xEF},  //0x34 inverse 4
-  { 0xD8, 0xBA, 0xBA, 0xBA, 0xC6},  //0x35 inverse 5
-  { 0xC1, 0xB6, 0xB6, 0xB6, 0xCD},  //0x36 inverse 6
-  { 0xBE, 0xDE, 0xEE, 0xF6, 0xF8},  //0x37 inverse 7
-  { 0xC9, 0xB6, 0xB6, 0xB6, 0xC9},  //0x38 inverse 8
-  { 0xD9, 0xB6, 0xB6, 0xB6, 0xC1},  //0x39 inverse 9
-*/
-
+DHT	sensor;
 void setup() {
 
   Serial.begin(9600);
@@ -98,44 +71,77 @@ void setup() {
   lcd.begin(84, 48); //Инициализируем дисплей
 }
 
-
 void loop() {
 
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= 1000) {
-    previousMillis = currentMillis;
-    time++; //Прибавляем время
+  unsigned long currentMillis = millis(); //Узнаем, сколько прошло миллисекунд
+
+  if(currentMillis - previousMillis >= 1000) { //Если миллисекунд, с последнего loop`а прошло больше 1000 (секунды)
+    previousMillis = currentMillis; //Запоминаем, нынешнее колличество миллисекунда
+    time++; //Прибавляем секунду к нашему таймеру
+
+
+
+
+    if(time == alarm && status) {
+        cookSet(true);
+    }
+
+    if(cook_flag) {
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        cook_tmp -= 1;
+
+        if(cook_tmp % 2 == 0) {
+            lcd.drawBitmap(cofebreak1, 48, 6);
+        } else {
+            lcd.drawBitmap(cofebreak2, 48, 6);
+        }
+
+        if(cook_tmp == 0) {
+            status = false;
+            cookSet(false);
+            lcd.clear();
+        }
+    } else if(hover_menu == 0 && selected_menu == 0) {
+        int result = sensor.read(13);
+        switch(result){
+            case DHT_OK:
+                //lcd.clear();
+                lcd.setCursor(54, 0);
+                lcd.drawBitmap(thermometer, 12, 2);
+                lcd.print(sensor.tem, 0);
+                break;
+            //case DHT_ERROR_CHECKSUM:	Serial.println("CEHCOP B KOMHATE: HE PABEHCTBO KC");				break;
+            //case DHT_ERROR_DATA:		Serial.println("CEHCOP B KOMHATE: OTBET HE COOTBETCTB. CEHCOPAM 'DHT'");	break;
+            //case DHT_ERROR_NO_REPLY:	Serial.println("CEHCOP B KOMHATE: HET OTBETA");				break;
+            //default: Serial.println("CEHCOP B KOMHATE: ERROR"); break;
+        }
+    }
   }
 
   char key = keypad.getKey(); //Смотрим, нажата ли кнопка на клавиатуре
 
-  if (key) { //Кнопка нажата
+  if(key) { //Кнопка нажата
+
+    if(cook_flag) {
+        cookSet(false);
+    }
 
     lcd.clear(); //Отчищаем экранчик
 
     onKeyPress(&key); //Реагируем на нажатие клавиши
   }
 
+
   showOnDisplay(); //Отрисовывам экран
 }
 
-unsigned long getSecFromInput() {
-  unsigned long dec[4] = {
-    byte(currentTime[0]) - 48,
-    byte(currentTime[1]) - 48,
-    byte(currentTime[2]) - 48,
-    byte(currentTime[3]) - 48
-  };
+void cookSet(bool flag) {
+    cook_flag = flag;
 
-  if ( (dec[0] * 10) + dec[1] <= 23) {
-    if ((dec[2] * 10) + dec[3] <= 59) {
-      if ( (dec[0] * 36000) + (dec[1] * 3600) + (dec[2] * 600) + (dec[3] * 60) <  86400) {
-        return (dec[0] * 36000) + (dec[1] * 3600) + (dec[2] * 600) + (dec[3] * 60);
-      }
-    }
-  }
-
-  return 100000000; //Ошибка
+     if(cook_flag) {
+        cook_tmp = cook;
+     }
 }
 
 /**
@@ -217,7 +223,7 @@ void onKeyPress(char *key) {
       }
       break;
 
-    case 4: //Если в меню "настройка дисплея"
+    case 4: //Если в меню "настройка приготовления"
 
       break;
 
@@ -249,12 +255,7 @@ void onKeyPress(char *key) {
   }
 }
 
-void exitToMainMenu(byte *selected_menu) {
-  hover_menu = *selected_menu; //Устанавливаем курсор на нынешнем пункте
-  *selected_menu = 0; //Выходим в главное меню
-  hover_menu_count = 5;
-}
-
+//Отобразить менб на дисплее
 void showOnDisplay() {
   switch (selected_menu) {
 
@@ -349,7 +350,7 @@ void showOnDisplay() {
 
       break;
 
-    case 4: //настройка дисплея
+    case 4: //установка времени приготовления
 
       break;
 
@@ -357,26 +358,29 @@ void showOnDisplay() {
 
       if (hover_menu == 0) { //окно состояния. Отображение времени, будильника, будет ли включение.
 
-        lcd.setCursor(0, 1); //Будем показывать время
-        //Пишем слово "Время "
-        lcd.write(0xc2); lcd.write(0xf0); lcd.write(0xe5); lcd.write(0xec); lcd.write(0xff); lcd.write(0x20);
-        showTime( time ); //Отображаем форматировано время
+        if(!cook_flag) {
+            lcd.setCursor(0, 0); //Будем показывать время
+            //Пишем слово "Время "
+            lcd.write(0xc2); lcd.write(0xf0); lcd.write(0xe5); lcd.write(0xec); lcd.write(0xff); lcd.write(0x20);
+            lcd.setCursor(0, 1); //Будем показывать время
+            showTime( time ); //Отображаем форматировано время
 
-        lcd.setCursor(0, 3); //Будем отображать будильник
-        showTime( alarm, false); //Отображаем форматировано время
-        lcd.print("  (");
-        showTime(alarm - time + (time > alarm ? 86400 : 0), false);
-        lcd.print(")");
+            lcd.setCursor(0, 3); //Будем отображать будильник
+            showTime( alarm, false); //Отображаем форматировано время
+            lcd.print("  (");
+            showTime(alarm - time + (time > alarm ? 86400 : 0), false);
+            lcd.print(")");
 
-        //Показываем состояние
-        lcd.setCursor(0, 5);
+            //Показываем состояние
+            lcd.setCursor(0, 5);
 
-        if (status) { //Показываем "Заряжен"
-          lcd.write(0xc7); lcd.write(0xe0); lcd.write(0xf0); lcd.write(0xff); lcd.write(0xe6); lcd.write(0xe5); lcd.write(0xed);
-        } else { //Показываем "НE заряжен"
-          lcd.write(0xcd); lcd.write(0x45); lcd.write(0x20); lcd.write(0xe7); lcd.write(0xe0); lcd.write(0xf0); lcd.write(0xff); lcd.write(0xe6); lcd.write(0xe5); lcd.write(0xed);
+            if (status) { //Показываем "Заряжен"
+              lcd.write(0xc7); lcd.write(0xe0); lcd.write(0xf0); lcd.write(0xff); lcd.write(0xe6); lcd.write(0xe5); lcd.write(0xed);
+            } else { //Показываем "НE заряжен"
+              lcd.write(0xcd); lcd.write(0x45); lcd.write(0x20); lcd.write(0xe7); lcd.write(0xe0); lcd.write(0xf0); lcd.write(0xff); lcd.write(0xe6); lcd.write(0xe5); lcd.write(0xed);
+            }
+            //lcd.setInverse(false);
         }
-        //lcd.setInverse(false);
 
 
       } else { //Выбор пунктов в главном меню
@@ -398,10 +402,10 @@ void showOnDisplay() {
         lcd.print(( hover_menu == 3 ? ">>" : "  "));
         lcd.write(0xc2); lcd.write(0xf0); lcd.write(0xe5); lcd.write(0xec); lcd.write(0xff);
 
-        //Дислей
+        //Приготовление
         lcd.setCursor(0, 3);
         lcd.print(( hover_menu == 4 ? ">>" : "  "));
-        lcd.write(0xc4); lcd.write(0xe8); lcd.write(0xf1); lcd.write(0xeb); lcd.write(0xe5); lcd.write(0xe9);
+        lcd.write(0xcf); lcd.write(0xf0); lcd.write(0xe8); lcd.write(0xe3); lcd.write(0xee); lcd.write(0xf2); lcd.write(0xee); lcd.write(0xe2); lcd.write(0xeb); lcd.write(0xe5); lcd.write(0xed); lcd.write(0xe8); lcd.write(0xe5);
 
         //Выход
         lcd.setCursor(0, 4);
@@ -414,10 +418,39 @@ void showOnDisplay() {
   }
 }
 
+//Получить время (в секундах) из поля ввода
+unsigned long getSecFromInput() {
+  unsigned long dec[4] = {
+    byte(currentTime[0]) - 48,
+    byte(currentTime[1]) - 48,
+    byte(currentTime[2]) - 48,
+    byte(currentTime[3]) - 48
+  };
+
+  if ( (dec[0] * 10) + dec[1] <= 23) {
+    if ((dec[2] * 10) + dec[3] <= 59) {
+      if ( (dec[0] * 36000) + (dec[1] * 3600) + (dec[2] * 600) + (dec[3] * 60) <  86400) {
+        return (dec[0] * 36000) + (dec[1] * 3600) + (dec[2] * 600) + (dec[3] * 60);
+      }
+    }
+  }
+
+  return 100000000; //Ошибка
+}
+
+//Выход в главное меню
+void exitToMainMenu(byte *selected_menu) {
+  hover_menu = *selected_menu; //Устанавливаем курсор на нынешнем пункте
+  *selected_menu = 0; //Выходим в главное меню
+  hover_menu_count = 5;
+}
+
+//Отобразить время
 void showTime(unsigned long sec) {
   showTime(sec, true);
 }
 
+//Отобразить время
 void showTime(unsigned long sec, bool show_sec) {
   unsigned int hours = sec / 3600;
   unsigned int minutes = (sec / 60) % 60;
