@@ -1,10 +1,8 @@
 #include <rim-PCD8544.h> //Библиотека дисплея
 #include <Keypad.h> //Библиотека клавиатуры
-#include <DHT.h>
-#include <avr/pgmspace.h>
-#include "image.cpp"
+#include <DHT.h> //Библиотека датчика температуры и влажности
 
-
+#include "image.cpp" //Файлик с иконками
 
 static PCD8544 lcd; //Дисплей. Конструктор смотреть в библиотеке. Там и пины прописаны
 
@@ -18,12 +16,12 @@ char keys[keypad_rows][keypad_cols] = {
   {'*', '0', '#'}
 };
 
-byte rowPins[keypad_rows] = {13, 12, 11, 10}; //соединяем сроки с пинами для клавиатуры
-byte colPins[keypad_cols] = {9, 7, 8}; //соединяем столбцы с пинами для клавиатуры
+byte rowPins[keypad_rows] = {13, 12, 11, 10}; //Соединяем сроки с пинами для клавиатуры
+byte colPins[keypad_cols] = {9, 7, 8}; //Соединяем столбцы с пинами для клавиатуры
 
 Keypad keypad = Keypad( makeKeymap(keys), rowPins, colPins, keypad_rows, keypad_cols); //Инициализируем клавиатуру
 
-unsigned long previousMillis = 0; //Предыдущее (d loop`е) значение в миллисекундах
+unsigned long previousMillis = 0; //Предыдущее (в loop`е) значение в миллисекундах
 
 unsigned long time = 0; //Текущее время (в секундах)
 
@@ -35,38 +33,19 @@ bool cook_flag = false;
 unsigned long cook = 10; //Установленное время приготовления (в секундах)
 unsigned long cook_tmp = 0; //Текущее время приготовления (в секундах)
 
-
 byte selected_menu = 0;  //Выбранный пунк меню
 byte hover_menu = 0; //Подсвеченный пунк меню
-byte hover_menu_count = 5; //Устанавливаем количество элементов в меню
+byte hover_menu_count = 5; //Устанавливаем количество элементов в меню (главном)
 
 byte currentTimeCursor = 0; //Текущая позиция курсора по отрисовке времени
 char currentTime[4] = {'1', '3', '5', '6'}; //Текущие введенные цифры времени
 
 //Коды шрифта цифр в инверсии (для дисплея)
 byte inverseInt[10] = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19};
-/**
-   Меню:
-   - окно состояния (0)  (отображение времени, будильника, будет ли включение)
-   - установка состояния (1)
-   - установка будильника (2)
-   - установка времени (3)
-   - установка приготовления (4)
-   - выход (5) (только для hover_menu)
 
-   Выбранный пунк меню по коду такой же, как и выше.
-   Т.е. если мы находимся на главном экране, то selected_menu == 0 && hover_menu == 0
-   Если мы находимся на этапе выбора меню, то selected_menu == 0 && hover_menu == 1
-   Если мы находимся на этапе выбора меню и подсвечено "установка будильника", то selected_menu == 0 && hover_menu == 2
-   Если мы находимся в окне "установка времени", то  selected_menu == 3 && hover_menu == 0
-   И так далее
-*/
-
-
-DHT	sensor;
 void setup() {
 
-  Serial.begin(9600);
+  Serial.begin(9600); //@TODO убрать в продакшене все Serial
 
   lcd.begin(84, 48); //Инициализируем дисплей
 }
@@ -76,11 +55,31 @@ void loop() {
   unsigned long currentMillis = millis(); //Узнаем, сколько прошло миллисекунд
 
   if(currentMillis - previousMillis >= 1000) { //Если миллисекунд, с последнего loop`а прошло больше 1000 (секунды)
-    previousMillis = currentMillis; //Запоминаем, нынешнее колличество миллисекунда
+    secondPassed(&currentMillis); //Запускаем то, что должно произойти по прошесвии секунды
+  }
+
+  char key = keypad.getKey(); //Смотрим, нажата ли кнопка на клавиатуре
+
+  if(key) { //Кнопка нажата
+
+    if(cook_flag) { //Если во время нажатия кнопки готовили
+        cookSet(false); //Отменяем приготовление кофе
+    }
+
+    lcd.clear(); //Отчищаем экранчик
+
+    onKeyPress(&key); //Реагируем на нажатие клавиши
+  }
+
+  showOnDisplay(); //Отрисовывам экран
+}
+
+/**
+    Функция выполняется по прошествии секунды времени
+*/
+void secondPassed(unsigned long *currentMillis) {
+    previousMillis = *currentMillis; //Запоминаем, нынешнее колличество миллисекунда
     time++; //Прибавляем секунду к нашему таймеру
-
-
-
 
     if(time == alarm && status) {
         cookSet(true);
@@ -103,45 +102,72 @@ void loop() {
             lcd.clear();
         }
     } else if(hover_menu == 0 && selected_menu == 0) {
-        int result = sensor.read(13);
-        switch(result){
-            case DHT_OK:
-                //lcd.clear();
-                lcd.setCursor(54, 0);
-                lcd.drawBitmap(thermometer, 12, 2);
-                lcd.print(sensor.tem, 0);
-                break;
-            //case DHT_ERROR_CHECKSUM:	Serial.println("CEHCOP B KOMHATE: HE PABEHCTBO KC");				break;
-            //case DHT_ERROR_DATA:		Serial.println("CEHCOP B KOMHATE: OTBET HE COOTBETCTB. CEHCOPAM 'DHT'");	break;
-            //case DHT_ERROR_NO_REPLY:	Serial.println("CEHCOP B KOMHATE: HET OTBETA");				break;
-            //default: Serial.println("CEHCOP B KOMHATE: ERROR"); break;
-        }
+        showDHTOnDisplay(13); //Да, да, 13-й пин используется и для клавиатуры тоже.. Не хватает пинов...
     }
-  }
-
-  char key = keypad.getKey(); //Смотрим, нажата ли кнопка на клавиатуре
-
-  if(key) { //Кнопка нажата
-
-    if(cook_flag) {
-        cookSet(false);
-    }
-
-    lcd.clear(); //Отчищаем экранчик
-
-    onKeyPress(&key); //Реагируем на нажатие клавиши
-  }
-
-
-  showOnDisplay(); //Отрисовывам экран
 }
 
+
+void showDHTOnDisplay(byte pinDHT) {
+
+    uint8_t	reply[6] = [0, 0, 0, 0, 0, 0];
+
+	static byte model = 0;
+
+	pinMode(PinDHT, OUTPUT);
+	digitalWrite(PinDHT, LOW);
+	delay(25);  //Прижимаем шину к земле на 25мс
+
+	pinMode(PinDHT, INPUT); // Отпускаем шину
+
+	if(pulseIn(PinDHT, HIGH, 600) == 0) { //Проверяем реакцию датчика на сигнал "старт"
+	    return -3; //Данных нет, датчик не реагирует или отсутствует
+	}
+
+	for(int i=0,j=0; i<40; i++) { //Читаем ответ датчика (40бит данных)
+	    j = pulseIn(PinDHT, HIGH, 600);
+	    if(j) {
+	        reply[i/8] <<= 1;
+	        reply[i/8] += j > 45 ? 1 : 0;
+	    } else {
+	        return -2; //Данные не соответствуют заявленным в datasheet на сенсоры
+	    }
+	}
+
+
+	if( pulseIn(PinDHT, HIGH, 600) > 0 ) { //Проверяем не отправляет ли датчик в шину больше 40 бит данных
+	    return -2; //Данные не соответствуют заявленным в datasheet на сенсоры
+	}
+
+	if(((reply[0]+reply[1]+reply[2]+reply[3])&0xff)!=reply[4]) { //Проверяем контрольную сумму
+	    return -1; //Ошибка контрольной суммы (данные прочтены не корректно, мешает другое устройство на той же шине или имеются помехи)
+	}
+
+    if(model == 0) {
+        if( reply[1] || reply[3] || reply[2]&0x80 ) { //Определяем модель сенсора
+            model = 22;
+        } else if( reply[0] > 3 || reply[2] > 4 ) {
+            model = 11;
+        }
+	}
+
+    //записываем полученные данные в переменные (с учётом модели и знака температуры)
+	//float hum = float(reply[1]+(model==11?reply[0]: reply[0]<<8))*(model==11?1: 0.1 );
+	float tem = float(reply[3] + ( model == 11 ? reply[2] : (reply[2]&0x7F)<<8) ) * ( model == 11 ? 1 : (reply[2]&0x80 ? -0.1 : 0.1) );
+
+    lcd.setCursor(54, 0);
+    lcd.drawBitmap(thermometer, 12, 2);
+    lcd.print(tem, 0);
+}
+
+/**
+    Функция установки реле, отвечающее за приготовление кофе
+*/
 void cookSet(bool flag) {
     cook_flag = flag;
 
-     if(cook_flag) {
+    if(cook_flag) {
         cook_tmp = cook;
-     }
+    }
 }
 
 /**
@@ -173,58 +199,15 @@ void onKeyPress(char *key) {
       break;
 
     case 2: //Если в меню "установка будильника"
-
-      if (*key == '*') { //Сохраняем значение будильника
-        unsigned long test = getSecFromInput();
-
-        if (test < 1000000) { //Нет ошибки
-          alarm = test;
-          return exitToMainMenu( &selected_menu ); //Выходим в главное меню
-        } else { //Ошибка ввода
-          currentTimeCursor = 0;
-        }
-      }
-      //Если ввели цифру - нужно вставить его в одно из 4х полей ввода
-      else if (*key == '0' || *key == '1' || *key == '2' || *key == '3' || *key == '4' || *key == '5' || *key == '6' || *key == '7' || *key == '8' || *key == '9') {
-
-
-        currentTime[currentTimeCursor] = *key; //Устанавливаем курсор в одно из 4х полей (хх:хх)
-
-        currentTimeCursor++; //Перемешаем курсор на следующее поле ввода
-
-        if (currentTimeCursor > 3) { //Если курсор (индекс, считаем от нуля) больше 3
-          currentTimeCursor = 0; //Возвращаем курсор в начало
-        }
-      }
+        onKeyPressSetTime(&key, &selected_menu, true, &alarm); //Обработка события нажатий кнопки при установке времени
       break;
 
     case 3: //Если в меню "установка времени"
-      if (*key == '*') { //Сохраняем значение времени
-        unsigned long test = getSecFromInput();
-
-        if (test < 1000000) { //Нет ошибки
-          time = test;
-          return exitToMainMenu( &selected_menu ); //Выходим в главное меню
-        } else { //Ошибка ввода
-          currentTimeCursor = 0;
-        }
-      }
-      //Если ввели цифру - нужно вставить его в одно из 4х полей ввода
-      else if (*key == '0' || *key == '1' || *key == '2' || *key == '3' || *key == '4' || *key == '5' || *key == '6' || *key == '7' || *key == '8' || *key == '9') {
-
-
-        currentTime[currentTimeCursor] = *key; //Устанавливаем курсор в одно из 4х полей (хх:хх)
-
-        currentTimeCursor++; //Перемешаем курсор на следующее поле ввода
-
-        if (currentTimeCursor > 3) { //Если курсор (индекс, считаем от нуля) больше 3
-          currentTimeCursor = 0; //Возвращаем курсор в начало
-        }
-      }
+        onKeyPressSetTime(&key, &selected_menu, true, &time); //Обработка события нажатий кнопки при установке времени
       break;
 
     case 4: //Если в меню "настройка приготовления"
-
+        onKeyPressSetTime(&key, &selected_menu, false, &cook); //Обработка события нажатий кнопки при установке времени
       break;
 
     default: //Если в главном меню
@@ -253,6 +236,34 @@ void onKeyPress(char *key) {
 
       break;
   }
+}
+
+/**
+ Функция обработки события нажатий кнопки при установке времени
+*/
+void onKeyPressSetTime(char *key, byte *selected_menu, bool formatHHMM, unsigned long *timer) {
+    if (*key == '*') { //Сохраняем значение
+
+        unsigned long test = getSecFromInput( &formatHHMM );
+
+        if (test < 1000000) { //Нет ошибки
+          *timer = test;
+          return exitToMainMenu( &selected_menu ); //Выходим в главное меню
+        } else { //Ошибка ввода
+          currentTimeCursor = 0;
+        }
+    }
+    //Если ввели цифру - нужно вставить его в одно из 4х полей ввода
+    else if (*key == '0' || *key == '1' || *key == '2' || *key == '3' || *key == '4' || *key == '5' || *key == '6' || *key == '7' || *key == '8' || *key == '9') {
+
+        currentTime[currentTimeCursor] = *key; //Устанавливаем курсор в одно из 4х полей (хх:хх)
+
+        currentTimeCursor++; //Перемешаем курсор на следующее поле ввода
+
+        if (currentTimeCursor > 3) { //Если курсор (индекс, считаем от нуля) больше 3
+          currentTimeCursor = 0; //Возвращаем курсор в начало
+        }
+    }
 }
 
 //Отобразить менб на дисплее
@@ -294,28 +305,7 @@ void showOnDisplay() {
       //Пишем "Будильник:"
       lcd.write(0xc1); lcd.write(0xf3); lcd.write(0xe4); lcd.write(0xe8); lcd.write(0xeb); lcd.write(0xfc); lcd.write(0xed); lcd.write(0xe8); lcd.write(0xea); lcd.write(0x3a);
 
-      lcd.setCursor(0, 2);
-      for (byte i = 0; i <= 3; i++) {
-
-        /* 0 - 9  = 48 - 57 */
-        byte dec = byte(currentTime[i]) - 48;
-
-        if (currentTimeCursor == i) {
-          lcd.write(inverseInt[dec]);
-        } else {
-          //lcd.write(inverseInt[dec]);
-          lcd.print(currentTime[i]);
-        }
-
-        if (i == 1) {
-          lcd.print(':');
-        }
-      }
-
-      lcd.setCursor(0, 4);
-      lcd.print("* - ");
-      //Пишем "сохранить"
-      lcd.write(0xf1); lcd.write(0xee); lcd.write(0xf5); lcd.write(0xf0); lcd.write(0xe0); lcd.write(0xed); lcd.write(0xe8); lcd.write(0xf2); lcd.write(0xfc);
+      timeSetDisplay();
 
       break;
 
@@ -325,32 +315,19 @@ void showOnDisplay() {
       //Пишем "Время:"
       lcd.write(0xc2); lcd.write(0xf0); lcd.write(0xe5); lcd.write(0xec); lcd.write(0xff); lcd.write(0x3a);
 
-      lcd.setCursor(0, 2);
-      for (byte i = 0; i <= 3; i++) {
-
-        /* 0 - 9  = 48 - 57 */
-        byte dec = byte(currentTime[i]) - 48;
-
-        if (currentTimeCursor == i) {
-          lcd.write(inverseInt[dec]);
-        } else {
-          //lcd.write(inverseInt[dec]);
-          lcd.print(currentTime[i]);
-        }
-
-        if (i == 1) {
-          lcd.print(':');
-        }
-      }
-
-      lcd.setCursor(0, 4);
-      lcd.print("* - ");
-      //Пишем "сохранить"
-      lcd.write(0xf1); lcd.write(0xee); lcd.write(0xf5); lcd.write(0xf0); lcd.write(0xe0); lcd.write(0xed); lcd.write(0xe8); lcd.write(0xf2); lcd.write(0xfc);
+      timeSetDisplay();
 
       break;
 
     case 4: //установка времени приготовления
+
+        lcd.setCursor(0, 0);
+        //Пишем "Готовка (мин:сек):"
+        lcd.write(0xc3); lcd.write(0xee); lcd.write(0xf2); lcd.write(0xee); lcd.write(0xe2); lcd.write(0xea);
+        lcd.write(0xe0); lcd.write(0x20); lcd.write(0x28); lcd.write(0xec); lcd.write(0xe8); lcd.write(0xed);
+        lcd.write(0x3a); lcd.write(0xf1); lcd.write(0xe5); lcd.write(0xea); lcd.write(0x29); lcd.write(0x3a);
+
+        timeSetDisplay();
 
       break;
 
@@ -363,7 +340,7 @@ void showOnDisplay() {
             //Пишем слово "Время "
             lcd.write(0xc2); lcd.write(0xf0); lcd.write(0xe5); lcd.write(0xec); lcd.write(0xff); lcd.write(0x20);
             lcd.setCursor(0, 1); //Будем показывать время
-            showTime( time ); //Отображаем форматировано время
+            showTime( time, true ); //Отображаем форматировано время
 
             lcd.setCursor(0, 3); //Будем отображать будильник
             showTime( alarm, false); //Отображаем форматировано время
@@ -418,8 +395,31 @@ void showOnDisplay() {
   }
 }
 
-//Получить время (в секундах) из поля ввода
-unsigned long getSecFromInput() {
+void timeSetDisplay() {
+    lcd.setCursor(0, 2);
+    for (byte i = 0; i <= 3; i++) {
+
+        byte dec = byte(currentTime[i]) - 48; //0 - 9  = 48 - 57
+
+        if (currentTimeCursor == i) {
+          lcd.write(inverseInt[dec]);
+        } else {
+          lcd.print(currentTime[i]);
+        }
+
+        if (i == 1) {
+          lcd.print(':');
+        }
+    }
+
+    lcd.setCursor(0, 4);
+    lcd.print("* - ");
+    //Пишем "сохранить"
+    lcd.write(0xf1); lcd.write(0xee); lcd.write(0xf5); lcd.write(0xf0); lcd.write(0xe0); lcd.write(0xed); lcd.write(0xe8); lcd.write(0xf2); lcd.write(0xfc);
+}
+
+//Получить время (в секундах) из поля ввода (formatHHMM => чч:mm = true, мм:сс = false)
+unsigned long getSecFromInput(bool *formatHHMM) {
   unsigned long dec[4] = {
     byte(currentTime[0]) - 48,
     byte(currentTime[1]) - 48,
@@ -427,13 +427,23 @@ unsigned long getSecFromInput() {
     byte(currentTime[3]) - 48
   };
 
-  if ( (dec[0] * 10) + dec[1] <= 23) {
-    if ((dec[2] * 10) + dec[3] <= 59) {
-      if ( (dec[0] * 36000) + (dec[1] * 3600) + (dec[2] * 600) + (dec[3] * 60) <  86400) {
-        return (dec[0] * 36000) + (dec[1] * 3600) + (dec[2] * 600) + (dec[3] * 60);
-      }
+    if(*formatHHMM) {
+        if ( (dec[0] * 10) + dec[1] <= 23) {
+            if ((dec[2] * 10) + dec[3] <= 59) {
+                if ( (dec[0] * 36000) + (dec[1] * 3600) + (dec[2] * 600) + (dec[3] * 60) <  86400) {
+                    return (dec[0] * 36000) + (dec[1] * 3600) + (dec[2] * 600) + (dec[3] * 60);
+                }
+            }
+        }
+    } else {
+        if ( (dec[0] * 10) + dec[1] <= 59) {
+            if ((dec[2] * 10) + dec[3] <= 59) {
+                if ( (dec[0] * 600) + (dec[1] * 60) + (dec[2] * 10) + dec[3] <  3600) {
+                    return (dec[0] * 600) + (dec[1] * 60) + (dec[2] * 10) + dec[3];
+                }
+            }
+        }
     }
-  }
 
   return 100000000; //Ошибка
 }
@@ -443,11 +453,6 @@ void exitToMainMenu(byte *selected_menu) {
   hover_menu = *selected_menu; //Устанавливаем курсор на нынешнем пункте
   *selected_menu = 0; //Выходим в главное меню
   hover_menu_count = 5;
-}
-
-//Отобразить время
-void showTime(unsigned long sec) {
-  showTime(sec, true);
 }
 
 //Отобразить время
