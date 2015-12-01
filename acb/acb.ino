@@ -1,6 +1,5 @@
 #include <rim-PCD8544.h> //Библиотека дисплея
 #include <Keypad.h> //Библиотека клавиатуры
-#include <DHT.h> //Библиотека датчика температуры и влажности
 
 #include "image.cpp" //Файлик с иконками
 
@@ -52,7 +51,32 @@ void loop() {
     unsigned long currentMillis = millis(); //Узнаем, сколько прошло миллисекунд
 
     if (currentMillis - previousMillis >= 1000) { //Если миллисекунд, с последнего loop`а прошло больше 1000 (секунды)
-        secondPassed(&currentMillis); //Запускаем то, что должно произойти по прошесвии секунды
+        //Запускаем то, что должно произойти по прошесвии секунды
+        previousMillis = currentMillis; //Запоминаем, нынешнее колличество миллисекунда
+
+        time++; //Прибавляем секунду к нашему таймеру
+
+        if (time == alarm && status) {
+            cookSet(true);
+        }
+
+        if (cook_flag) {
+            lcd.clear();
+            lcd.setCursor(0, 0);
+            cook_tmp -= 1;
+
+            lcd.drawBitmap( cook_tmp % 2 == 0 ? cofebreak1 : cofebreak2, 48, 6);
+
+            if (cook_tmp == 0) {
+                status = false;
+                cookSet(false);
+                lcd.clear();
+            }
+
+        } else if (hover_menu == 0 && selected_menu == 0) {
+            display_temperatureOnDHT(13); //Да, да, 13-й пин используется и для клавиатуры тоже.. Не хватает пинов...
+        }
+
     }
 
     char key = keypad.getKey(); //Смотрим, нажата ли кнопка на клавиатуре
@@ -71,38 +95,7 @@ void loop() {
     display_menu(); //Отрисовывам экран
 }
 
-/**
-    Функция выполняется по прошествии секунды времени
-*/
-void secondPassed(unsigned long *currentMillis) {
-    previousMillis = *currentMillis; //Запоминаем, нынешнее колличество миллисекунда
-
-    time++; //Прибавляем секунду к нашему таймеру
-
-    if (time == alarm && status) {
-        cookSet(true);
-    }
-
-    if (cook_flag) {
-        lcd.clear();
-        lcd.setCursor(0, 0);
-        cook_tmp -= 1;
-
-        lcd.drawBitmap( cook_tmp % 2 == 0 ? cofebreak1 : cofebreak2, 48, 6);
-
-        if (cook_tmp == 0) {
-            status = false;
-            cookSet(false);
-            lcd.clear();
-        }
-
-    } else if (hover_menu == 0 && selected_menu == 0) {
-        display_temperatureOnDHT(13); //Да, да, 13-й пин используется и для клавиатуры тоже.. Не хватает пинов...
-    }
-}
-
-
-void display_temperatureOnDHT(unsigned char pinDHT) {
+void display_temperatureOnDHT(unsigned char PinDHT) {
 
     unsigned char reply[6] = {0, 0, 0, 0, 0, 0};
 
@@ -194,18 +187,15 @@ void onKeyPress(char *key) {
             break;
 
         case 2: //Если в меню "установка будильника"
-            onKeyPressSetTime(&key, &selected_menu, true,
-                              &alarm); //Обработка события нажатий кнопки при установке времени
+            onKeyPressSetTime(key, &selected_menu, true, &alarm); //Обработка события нажатий кнопки при установке времени
             break;
 
         case 3: //Если в меню "установка времени"
-            onKeyPressSetTime(&key, &selected_menu, true,
-                              &time); //Обработка события нажатий кнопки при установке времени
+            onKeyPressSetTime(key, &selected_menu, true, &time); //Обработка события нажатий кнопки при установке времени
             break;
 
         case 4: //Если в меню "настройка приготовления"
-            onKeyPressSetTime(&key, &selected_menu, false,
-                              &cook); //Обработка события нажатий кнопки при установке времени
+            onKeyPressSetTime(key, &selected_menu, false, &cook); //Обработка события нажатий кнопки при установке времени
             break;
 
         default: //Если в главном меню
@@ -246,7 +236,7 @@ void onKeyPressSetTime(char *key, byte *selected_menu, bool formatHHMM, unsigned
 
         if (test < 1000000) { //Нет ошибки
             *timer = test;
-            return exitToMainMenu(&selected_menu); //Выходим в главное меню
+            return exitToMainMenu(selected_menu); //Выходим в главное меню
         } else { //Ошибка ввода
             currentTimeCursor = 0;
         }
@@ -276,29 +266,14 @@ void display_menu() {
 
             lcd.setCursor(0, 0);
             //Пишем "Установка"
-            lcd.write(0xd3);
-            lcd.write(0xf1);
-            lcd.write(0xf2);
-            lcd.write(0xe0);
-            lcd.write(0xed);
-            lcd.write(0xee);
-            lcd.write(0xe2);
-            lcd.write(0xea);
-            lcd.write(0xe0);
+            uint8_t ystanovka9[] = {0xd3, 0xf1, 0xf2, 0xe0, 0xed, 0xee, 0xe2, 0xea, 0xe0};
+            display_write(ystanovka9, 9);
+
 
             lcd.setCursor(0, 1);
             //Пишем "состояния:"
-            lcd.write(0xf1);
-            lcd.write(0xee);
-            lcd.write(0xf1);
-            lcd.write(0xf2);
-            lcd.write(0xee);
-            lcd.write(0xff);
-            lcd.write(0xed);
-            lcd.write(0xe8);
-            lcd.write(0xff);
-            lcd.write(0x3a);
-
+            uint8_t sostoyaniya10[] = {0xf1, 0xee, 0xf1, 0xf2, 0xee, 0xff, 0xed, 0xe8, 0xff, 0x3a};
+            display_write(sostoyaniya10, 10);
 
             if (hover_menu == 0) { //Если только вошли в меню - устанавливаем курсор в зависимости от текущего состояния
                 hover_menu = status ? 1 : 2;
@@ -307,13 +282,9 @@ void display_menu() {
             lcd.setCursor(0, 3);
             lcd.print((hover_menu == 1 ? ">>" : "  "));
             //Показываем "Заряжен"
-            lcd.write(0xc7);
-            lcd.write(0xe0);
-            lcd.write(0xf0);
-            lcd.write(0xff);
-            lcd.write(0xe6);
-            lcd.write(0xe5);
-            lcd.write(0xed);
+            uint8_t zaryajen7[] = {0xc7, 0xe0, 0xf0, 0xff, 0xe6, 0xe5, 0xed};
+            display_write(zaryajen7, 7);
+
 
             lcd.setCursor(0, 4);
             lcd.print((hover_menu == 2 ? ">>" : "  "));
@@ -482,32 +453,24 @@ void display_menu() {
                 //Приготовление
                 lcd.setCursor(0, 3);
                 lcd.print((hover_menu == 4 ? ">>" : "  "));
-                lcd.write(0xcf);
-                lcd.write(0xf0);
-                lcd.write(0xe8);
-                lcd.write(0xe3);
-                lcd.write(0xee);
-                lcd.write(0xf2);
-                lcd.write(0xee);
-                lcd.write(0xe2);
-                lcd.write(0xeb);
-                lcd.write(0xe5);
-                lcd.write(0xed);
-                lcd.write(0xe8);
-                lcd.write(0xe5);
+                uint8_t Prigotovlenie[] = {0xcf, 0xf0, 0xe8, 0xe3, 0xee, 0xf2, 0xee, 0xe2, 0xeb, 0xe5, 0xed, 0xe8, 0xe5};
+                display_write(Prigotovlenie, 13);
 
                 //Выход
                 lcd.setCursor(0, 4);
                 lcd.print((hover_menu == 5 ? ">>" : "  "));
-                lcd.write(0xc2);
-                lcd.write(0xfb);
-                lcd.write(0xf5);
-                lcd.write(0xee);
-                lcd.write(0xe4);
+                uint8_t vyhod[] = {0xc2, 0xfb, 0xf5, 0xee, 0xe4};
+                display_write(vyhod, 5);
             }
 
 
             break;
+    }
+}
+
+void display_write(uint8_t chr[], uint8_t size) {
+    for(int i = 0; i < size; i++) {
+        lcd.write(chr[i]);
     }
 }
 
