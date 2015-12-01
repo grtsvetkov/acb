@@ -257,7 +257,11 @@ void onKeyPressSetTime(char *key, byte *selected_menu, bool formatHHMM, unsigned
 
 //Отобразить менб на дисплее
 void display_menu() {
-    
+
+    uint8_t ystanovka9[] = {0xd3, 0xf1, 0xf2, 0xe0, 0xed, 0xee, 0xe2, 0xea, 0xe0}; //Установка
+    uint8_t sostoyaniya10[] = {0xf1, 0xee, 0xf1, 0xf2, 0xee, 0xff, 0xed, 0xe8, 0xff, 0x3a}; //состояния
+    uint8_t zaryajen7[] = {0xc7, 0xe0, 0xf0, 0xff, 0xe6, 0xe5, 0xed}; //Заряжен
+
     switch (selected_menu) {
 
         case 1: //установка состояния
@@ -265,15 +269,11 @@ void display_menu() {
             hover_menu_count = 2; //В этом подменю всего 2 пункта
 
             lcd.setCursor(0, 0);
-            //Пишем "Установка"
-            uint8_t ystanovka9[] = {0xd3, 0xf1, 0xf2, 0xe0, 0xed, 0xee, 0xe2, 0xea, 0xe0};
-            display_write(ystanovka9, 9);
+            display_write(ystanovka9, 9); //Пишем "Установка"
 
 
             lcd.setCursor(0, 1);
-            //Пишем "состояния:"
-            uint8_t sostoyaniya10[] = {0xf1, 0xee, 0xf1, 0xf2, 0xee, 0xff, 0xed, 0xe8, 0xff, 0x3a};
-            display_write(sostoyaniya10, 10);
+            display_write(sostoyaniya10, 10); //Пишем "состояния:"
 
             if (hover_menu == 0) { //Если только вошли в меню - устанавливаем курсор в зависимости от текущего состояния
                 hover_menu = status ? 1 : 2;
@@ -281,9 +281,7 @@ void display_menu() {
 
             lcd.setCursor(0, 3);
             lcd.print((hover_menu == 1 ? ">>" : "  "));
-            //Показываем "Заряжен"
-            uint8_t zaryajen7[] = {0xc7, 0xe0, 0xf0, 0xff, 0xe6, 0xe5, 0xed};
-            display_write(zaryajen7, 7);
+            display_write(zaryajen7, 7); //Показываем "Заряжен"
 
 
             lcd.setCursor(0, 4);
@@ -453,14 +451,14 @@ void display_menu() {
                 //Приготовление
                 lcd.setCursor(0, 3);
                 lcd.print((hover_menu == 4 ? ">>" : "  "));
-                uint8_t Prigotovlenie[] = {0xcf, 0xf0, 0xe8, 0xe3, 0xee, 0xf2, 0xee, 0xe2, 0xeb, 0xe5, 0xed, 0xe8, 0xe5};
-                display_write(Prigotovlenie, 13);
+                uint8_t Prigotovlenie13[] = {0xcf, 0xf0, 0xe8, 0xe3, 0xee, 0xf2, 0xee, 0xe2, 0xeb, 0xe5, 0xed, 0xe8, 0xe5};
+                display_write(Prigotovlenie13, 13);
 
                 //Выход
                 lcd.setCursor(0, 4);
                 lcd.print((hover_menu == 5 ? ">>" : "  "));
-                uint8_t vyhod[] = {0xc2, 0xfb, 0xf5, 0xee, 0xe4};
-                display_write(vyhod, 5);
+                uint8_t vyhod5[] = {0xc2, 0xfb, 0xf5, 0xee, 0xe4};
+                display_write(vyhod5, 5);
             }
 
 
