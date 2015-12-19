@@ -16,7 +16,7 @@ char keys[keypad_rows][keypad_cols] = {
 };
 
 byte rowPins[keypad_rows] = {13, 12, 11, 10}; //Соединяем сроки с пинами для клавиатуры
-byte colPins[keypad_cols] = {9, 7, 8}; //Соединяем столбцы с пинами для клавиатуры
+byte colPins[keypad_cols] = {9, 8, 7}; //Соединяем столбцы с пинами для клавиатуры
 
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, keypad_rows, keypad_cols); //Инициализируем клавиатуру
 
@@ -24,9 +24,9 @@ unsigned long previousMillis = 0; //Предыдущее (в loop`е) значе
 
 unsigned long time = 0; //Текущее время (в секундах)
 
-unsigned long alarm = 10; //Установленный будильник в секундах (по умолчанию на 10:00:00)
+unsigned long alarm = 120; //Установленный будильник в секундах (по умолчанию на 00:00:05)
 
-bool status = false; //Текущее состояние (будет ли включена кофеварка по будильнику)
+bool status = true; //Текущее состояние (будет ли включена кофеварка по будильнику)
 
 bool cook_flag = false;
 unsigned long cook = 10; //Установленное время приготовления (в секундах)
@@ -42,8 +42,11 @@ char currentTime[4] = {'1', '3', '5', '6'}; //Текущие введенные 
 //Коды шрифта цифр в инверсии (для дисплея)
 byte inverseInt[10] = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19};
 
+byte releAnalogPin = A0;
+
 void setup() {
     lcd.begin(84, 48); //Инициализируем дисплей
+    //analogWrite(releAnalogPin, 0);
 }
 
 void loop() {
@@ -55,6 +58,10 @@ void loop() {
         previousMillis = currentMillis; //Запоминаем, нынешнее колличество миллисекунда
 
         time++; //Прибавляем секунду к нашему таймеру
+
+        if(time == 86400) {
+            time = 0;
+        }
 
         if (time == alarm && status) {
             cookSet(true);
@@ -156,6 +163,9 @@ void cookSet(bool flag) {
 
     if (cook_flag) {
         cook_tmp = cook;
+        analogWrite(releAnalogPin, 0);
+    } else {
+        analogWrite(releAnalogPin, 255);
     }
 }
 
