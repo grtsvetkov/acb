@@ -81,7 +81,7 @@ void loop() {
             }
 
         } else if (hover_menu == 0 && selected_menu == 0) {
-            display_temperatureOnDHT(13); //Да, да, 13-й пин используется и для клавиатуры тоже.. Не хватает пинов...
+            //display_temperatureOnDHT(13); //Да, да, 13-й пин используется и для клавиатуры тоже.. Не хватает пинов...
         }
 
     }
@@ -149,6 +149,7 @@ void display_temperatureOnDHT(unsigned char PinDHT) {
     //float hum = float(reply[1]+(model==11?reply[0]: reply[0]<<8))*(model==11?1: 0.1 );
     float tem = float(reply[3] + (model == 11 ? reply[2] : (reply[2] & 0x7F) << 8)) *
                 (model == 11 ? 1 : (reply[2] & 0x80 ? -0.1 : 0.1));
+
 
     lcd.setCursor(54, 0);
     lcd.drawBitmap(thermometer, 12, 2);
