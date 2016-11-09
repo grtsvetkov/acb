@@ -1,3 +1,4 @@
+#include <MsTimer2.h> //Библиотека таймера
 #include <rim-PCD8544.h> //Библиотека дисплея
 #include <Keypad.h> //Библиотека клавиатуры
 
@@ -20,13 +21,11 @@ byte colPins[keypad_cols] = {9, 8, 7}; //Соединяем столбцы с п
 
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, keypad_rows, keypad_cols); //Инициализируем клавиатуру
 
-unsigned long previousMillis = 0; //Предыдущее (в loop`е) значение в миллисекундах
-
 unsigned long time = 0; //Текущее время (в секундах)
 
 unsigned long alarm = 120; //Установленный будильник в секундах (по умолчанию на 00:00:05)
 
-bool status = true; //Текущее состояние (будет ли включена кофеварка по будильнику)
+bool status = false; //Текущее состояние (будет ли включена кофеварка по будильнику)
 
 bool cook_flag = false;
 unsigned long cook = 10; //Установленное время приготовления (в секундах)
@@ -44,46 +43,43 @@ byte inverseInt[10] = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x1
 
 byte releAnalogPin = A0;
 
+void secondPlus() {
+    time++;
+
+    if (time >= 86400) {
+        time = 0;
+    }
+}
+
 void setup() {
+
+    MsTimer2::set(1000, secondPlus);
+    MsTimer2::start();
+
     lcd.begin(84, 48); //Инициализируем дисплей
-    //analogWrite(releAnalogPin, 0);
 }
 
 void loop() {
 
-    unsigned long currentMillis = millis(); //Узнаем, сколько прошло миллисекунд
+    if (time == alarm && status) {
+        cookSet(true);
+    }
 
-    if (currentMillis - previousMillis >= 1000) { //Если миллисекунд, с последнего loop`а прошло больше 1000 (секунды)
-        //Запускаем то, что должно произойти по прошесвии секунды
-        previousMillis = currentMillis; //Запоминаем, нынешнее колличество миллисекунда
+    if (cook_flag) {
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        cook_tmp -= 1;
 
-        time++; //Прибавляем секунду к нашему таймеру
+        lcd.drawBitmap(cook_tmp % 2 == 0 ? cofebreak1 : cofebreak2, 48, 6);
 
-        if(time >= 86400) {
-            time = 0;
-        }
-
-        if (time == alarm && status) {
-            cookSet(true);
-        }
-
-        if (cook_flag) {
+        if (cook_tmp == 0) {
+            status = false;
+            cookSet(false);
             lcd.clear();
-            lcd.setCursor(0, 0);
-            cook_tmp -= 1;
-
-            lcd.drawBitmap( cook_tmp % 2 == 0 ? cofebreak1 : cofebreak2, 48, 6);
-
-            if (cook_tmp == 0) {
-                status = false;
-                cookSet(false);
-                lcd.clear();
-            }
-
-        } else if (hover_menu == 0 && selected_menu == 0) {
-            //display_temperatureOnDHT(13); //Да, да, 13-й пин используется и для клавиатуры тоже.. Не хватает пинов...
         }
 
+    } else if (hover_menu == 0 && selected_menu == 0) {
+        //display_temperatureOnDHT(13); //Да, да, 13-й пин используется и для клавиатуры тоже.. Не хватает пинов...
     }
 
     char key = keypad.getKey(); //Смотрим, нажата ли кнопка на клавиатуре
@@ -94,9 +90,9 @@ void loop() {
             cookSet(false); //Отменяем приготовление кофе
         }
 
-        lcd.clear(); //Отчищаем экранчик
+        lcd.clear(); //Отчищаем экран
 
-        onKeyPress(&key); //Реагируем на нажатие клавиши
+        onKeyPress(&key); //Реагируем на нажатие кнопок
     }
 
     display_menu(); //Отрисовывам экран
@@ -158,10 +154,9 @@ void display_temperatureOnDHT(unsigned char PinDHT) {
 
 /**
  * Функция установки реле, отвечающее за приготовление кофе
+ * @param flag
  */
 void cookSet(bool flag) {
-    cook_flag = flag;
-
     if (cook_flag) {
         cook_tmp = cook;
         analogWrite(releAnalogPin, 0);
@@ -198,15 +193,18 @@ void onKeyPress(char *key) {
             break;
 
         case 2: //Если в меню "установка будильника"
-            onKeyPressSetTime(key, &selected_menu, true, &alarm); //Обработка события нажатий кнопки при установке времени
+            onKeyPressSetTime(key, &selected_menu, true,
+                              &alarm); //Обработка события нажатий кнопки при установке времени
             break;
 
         case 3: //Если в меню "установка времени"
-            onKeyPressSetTime(key, &selected_menu, true, &time); //Обработка события нажатий кнопки при установке времени
+            onKeyPressSetTime(key, &selected_menu, true,
+                              &time); //Обработка события нажатий кнопки при установке времени
             break;
 
         case 4: //Если в меню "настройка приготовления"
-            onKeyPressSetTime(key, &selected_menu, false, &cook); //Обработка события нажатий кнопки при установке времени
+            onKeyPressSetTime(key, &selected_menu, false,
+                              &cook); //Обработка события нажатий кнопки при установке времени
             break;
 
         default: //Если в главном меню
@@ -266,13 +264,10 @@ void onKeyPressSetTime(char *key, byte *selected_menu, bool formatHHMM, unsigned
     }
 }
 
-//Отобразить менб на дисплее
+/**
+ * Отобразить меню на дисплее
+ */
 void display_menu() {
-
-    uint8_t ystanovka9[] = {0xd3, 0xf1, 0xf2, 0xe0, 0xed, 0xee, 0xe2, 0xea, 0xe0}; //Установка
-    uint8_t sostoyaniya10[] = {0xf1, 0xee, 0xf1, 0xf2, 0xee, 0xff, 0xed, 0xe8, 0xff, 0x3a}; //состояния
-    uint8_t zaryajen7[] = {0xc7, 0xe0, 0xf0, 0xff, 0xe6, 0xe5, 0xed}; //Заряжен
-
     switch (selected_menu) {
 
         case 1: //установка состояния
@@ -280,11 +275,10 @@ void display_menu() {
             hover_menu_count = 2; //В этом подменю всего 2 пункта
 
             lcd.setCursor(0, 0);
-            display_write(ystanovka9, 9); //Пишем "Установка"
-
+            display_write("Установка");
 
             lcd.setCursor(0, 1);
-            display_write(sostoyaniya10, 10); //Пишем "состояния:"
+            display_write("состояния:");
 
             if (hover_menu == 0) { //Если только вошли в меню - устанавливаем курсор в зависимости от текущего состояния
                 hover_menu = status ? 1 : 2;
@@ -292,40 +286,18 @@ void display_menu() {
 
             lcd.setCursor(0, 3);
             lcd.print((hover_menu == 1 ? ">>" : "  "));
-            display_write(zaryajen7, 7); //Показываем "Заряжен"
-
+            display_write("Заряжен");
 
             lcd.setCursor(0, 4);
             lcd.print((hover_menu == 2 ? ">>" : "  "));
-            //Показываем "НE заряжен"
-            lcd.write(0xcd);
-            lcd.write(0x45);
-            lcd.write(0x20);
-            lcd.write(0xe7);
-            lcd.write(0xe0);
-            lcd.write(0xf0);
-            lcd.write(0xff);
-            lcd.write(0xe6);
-            lcd.write(0xe5);
-            lcd.write(0xed);
+            display_write("НE заряжен");
 
             break;
 
         case 2: //установка будильника
 
             lcd.setCursor(0, 0);
-            //Пишем "Будильник:"
-            lcd.write(0xc1);
-            lcd.write(0xf3);
-            lcd.write(0xe4);
-            lcd.write(0xe8);
-            lcd.write(0xeb);
-            lcd.write(0xfc);
-            lcd.write(0xed);
-            lcd.write(0xe8);
-            lcd.write(0xea);
-            lcd.write(0x3a);
-
+            display_write("Будильник:");
             display_timeSet();
 
             break;
@@ -333,14 +305,7 @@ void display_menu() {
         case 3: //установка времени
 
             lcd.setCursor(0, 0);
-            //Пишем "Время:"
-            lcd.write(0xc2);
-            lcd.write(0xf0);
-            lcd.write(0xe5);
-            lcd.write(0xec);
-            lcd.write(0xff);
-            lcd.write(0x3a);
-
+            display_write("Время:");
             display_timeSet();
 
             break;
@@ -348,26 +313,7 @@ void display_menu() {
         case 4: //установка времени приготовления
 
             lcd.setCursor(0, 0);
-            //Пишем "Готовка (мин:сек):"
-            lcd.write(0xc3);
-            lcd.write(0xee);
-            lcd.write(0xf2);
-            lcd.write(0xee);
-            lcd.write(0xe2);
-            lcd.write(0xea);
-            lcd.write(0xe0);
-            lcd.write(0x20);
-            lcd.write(0x28);
-            lcd.write(0xec);
-            lcd.write(0xe8);
-            lcd.write(0xed);
-            lcd.write(0x3a);
-            lcd.write(0xf1);
-            lcd.write(0xe5);
-            lcd.write(0xea);
-            lcd.write(0x29);
-            lcd.write(0x3a);
-
+            display_write("Готовка (мин:сек):");
             display_timeSet();
 
             break;
@@ -378,14 +324,8 @@ void display_menu() {
 
                 if (!cook_flag) {
                     lcd.setCursor(0, 0); //Будем показывать время
-                    //Пишем слово "Время "
-                    lcd.write(0xc2);
-                    lcd.write(0xf0);
-                    lcd.write(0xe5);
-                    lcd.write(0xec);
-                    lcd.write(0xff);
-                    lcd.write(0x20);
-                    lcd.setCursor(0, 1); //Будем показывать время
+                    display_write("Время ");
+                    lcd.setCursor(0, 1);
                     display_time(time, true); //Отображаем форматировано время
 
                     lcd.setCursor(0, 3); //Будем отображать будильник
@@ -397,89 +337,79 @@ void display_menu() {
                     //Показываем состояние
                     lcd.setCursor(0, 5);
 
-                    if (status) { //Показываем "Заряжен"
-                        lcd.write(0xc7);
-                        lcd.write(0xe0);
-                        lcd.write(0xf0);
-                        lcd.write(0xff);
-                        lcd.write(0xe6);
-                        lcd.write(0xe5);
-                        lcd.write(0xed);
-                    } else { //Показываем "НE заряжен"
-                        lcd.write(0xcd);
-                        lcd.write(0x45);
-                        lcd.write(0x20);
-                        lcd.write(0xe7);
-                        lcd.write(0xe0);
-                        lcd.write(0xf0);
-                        lcd.write(0xff);
-                        lcd.write(0xe6);
-                        lcd.write(0xe5);
-                        lcd.write(0xed);
-                    }
-                    //lcd.setInverse(false);
+                    display_write(status ? "Заряжен" : "НE заряжен");
                 }
 
-
             } else { //Выбор пунктов в главном меню
-
-                //lcd.write(0xBB);
 
                 //Зарядить
                 lcd.setCursor(0, 0);
                 lcd.print((hover_menu == 1 ? ">>" : "  "));
-                lcd.write(0xc7);
-                lcd.write(0xe0);
-                lcd.write(0xf0);
-                lcd.write(0xff);
-                lcd.write(0xe4);
-                lcd.write(0xe8);
-                lcd.write(0xf2);
-                lcd.write(0xfc);
+                display_write("Зарядить");
 
                 //Будильник
                 lcd.setCursor(0, 1);
                 lcd.print((hover_menu == 2 ? ">>" : "  "));
-                lcd.write(0xc1);
-                lcd.write(0xf3);
-                lcd.write(0xe4);
-                lcd.write(0xe8);
-                lcd.write(0xeb);
-                lcd.write(0xfc);
-                lcd.write(0xed);
-                lcd.write(0xe8);
-                lcd.write(0xea);
+                display_write("Будильник");
 
                 //Время
                 lcd.setCursor(0, 2);
                 lcd.print((hover_menu == 3 ? ">>" : "  "));
-                lcd.write(0xc2);
-                lcd.write(0xf0);
-                lcd.write(0xe5);
-                lcd.write(0xec);
-                lcd.write(0xff);
+                display_write("Время");
 
                 //Приготовление
                 lcd.setCursor(0, 3);
                 lcd.print((hover_menu == 4 ? ">>" : "  "));
-                uint8_t Prigotovlenie13[] = {0xcf, 0xf0, 0xe8, 0xe3, 0xee, 0xf2, 0xee, 0xe2, 0xeb, 0xe5, 0xed, 0xe8, 0xe5};
-                display_write(Prigotovlenie13, 13);
+                display_write("Приготовление");
 
                 //Выход
                 lcd.setCursor(0, 4);
                 lcd.print((hover_menu == 5 ? ">>" : "  "));
-                uint8_t vyhod5[] = {0xc2, 0xfb, 0xf5, 0xee, 0xe4};
-                display_write(vyhod5, 5);
+                display_write("Выход");
             }
-
 
             break;
     }
 }
 
-void display_write(uint8_t chr[], uint8_t size) {
-    for(int i = 0; i < size; i++) {
-        lcd.write(chr[i]);
+void display_write(char *str) {
+
+    //АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ
+    //абвгдеёжзийклмнопрстуфхцчшщъыьэюя
+    bool loopFlag = true;
+    unsigned int i = 0;
+
+    while (loopFlag) {
+
+        unsigned char f = str[i];
+        unsigned char s = str[i + 1];
+        unsigned int T = (f << 8) + s;
+
+        unsigned int gl = f;
+
+        if (T >= 0xD090 || T == 0xD081) { //А = 53392 два байта, Ё = 53377 два байта
+
+            unsigned char delta = 0xCFD0; //53200
+
+            if (T == 0xD081) { //Ё
+                delta = 0xCFD9;
+            } else if (T == 0xD191) { //ё
+                delta = 0xD0D9;
+            } else if (f >= 0xD1) {
+                delta = 0xD090;
+            }
+
+            gl = T - delta;
+
+            i++;
+        }
+
+        lcd.write(gl);
+        i++;
+
+        if (f == 0 || f == '\0') {
+            loopFlag = false;
+        }
     }
 }
 
@@ -502,16 +432,8 @@ void display_timeSet() {
 
     lcd.setCursor(0, 4);
     lcd.print("* - ");
-    //Пишем "сохранить"
-    lcd.write(0xf1);
-    lcd.write(0xee);
-    lcd.write(0xf5);
-    lcd.write(0xf0);
-    lcd.write(0xe0);
-    lcd.write(0xed);
-    lcd.write(0xe8);
-    lcd.write(0xf2);
-    lcd.write(0xfc);
+
+    display_write("Сохранить");
 }
 
 //Получить время (в секундах) из поля ввода (formatHHMM => чч:mm = true, мм:сс = false)
@@ -544,14 +466,21 @@ unsigned long getSecFromInput(bool *formatHHMM) {
     return 100000000; //Ошибка
 }
 
-//Выход в главное меню
+/**
+ * Выход в главное меню
+ * @param selected_menu 
+ */
 void exitToMainMenu(byte *selected_menu) {
     hover_menu = *selected_menu; //Устанавливаем курсор на нынешнем пункте
     *selected_menu = 0; //Выходим в главное меню
     hover_menu_count = 5;
 }
 
-//Отобразить время
+/**
+ * Отобразить время
+ * @param sec количество секунд
+ * @param show_sec флаг, отображать ли секунды
+ */
 void display_time(unsigned long sec, bool show_sec) {
     unsigned int hours = sec / 3600;
     unsigned int minutes = (sec / 60) % 60;
